@@ -1,2 +1,2 @@
-# proposal_bot
+# proposal-bot
 Handle proposals for Indivisible SF
