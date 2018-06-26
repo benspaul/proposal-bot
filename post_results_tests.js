@@ -178,7 +178,6 @@ function getTests() {
       var votes = parseVotes(reactions);
 
       // then votes are correct (1 yes, 0 no, 0 stop, other reactions ignored)
-      // todo: compare objects directly without string conversion
       return assertEqual(votes, {yes: 1, no: 0, stop: 0}, arguments.callee.name);
     },
 
