@@ -1,12 +1,19 @@
-// todo: add official results to proposal document and mark document as read-only
-// todo: @mention proposal author
+// need to have:
+// todo: add emails to email notification section of proposal doc
+// todo: don't post if final response is No or Maybe - just mention in proposals channel instead
+// todo: on post, prepend proposal file name with "Accepting Comments - "
+// todo: when posting results, rename proposal title to reflect results
+
+// nice to have:
+// todo: format official results when added to proposal document
+// todo: change postResults to use json rather than url form submit
 
 function processProposals() {
   var nowPacificStr = Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a");
-  var nowPacificDate = new Date(nowPacificStr);
+  var nowPacificTime = new Date(nowPacificStr);
   
   var messages = getProposalsChannelMessages();
-  var results = getResultsToPost(messages, nowPacificDate);
+  var results = getResultsToPost(messages, nowPacificTime);
   postResults(results);
 }
 
@@ -41,6 +48,13 @@ function getResultsToPost(messages, referenceDate) {
     var sentence = convertResultsToSentence(results);
     var ts = messages[i]["ts"]; // timestamp represents message when threading
     resultsToPost[i] = {"thread_ts": ts, "votes": votes, "results": results, "sentence": sentence};
+    
+    // add proposal doc info
+    var doc = getProposalDoc(messages[i]);
+    if (doc !== null) {
+      resultsToPost[i]["doc"] = doc;
+      resultsToPost[i]["slacks"] = getOrganizerSlacks(doc);
+    }
   }
   return(resultsToPost);
 }
@@ -140,18 +154,82 @@ function convertResultsToSentence(results) {
   return(sentence);
 }
 
+function getProposalDoc(message) {
+
+  var urlRegex = "\\*Link to proposal:\\* <*([^\\|]+)";
+  var urlMatch = message["text"].match(urlRegex);
+  
+  if (urlMatch !== null) {
+    var url = urlMatch[1];
+    // if url is bitly, get url from redirect
+    if (url.indexOf("bit.ly") !== -1) {
+      url = UrlFetchApp.fetch(url, {followRedirects: false}).getAllHeaders()["Location"];
+    }
+    var doc = DocumentApp.openByUrl(url);
+    return(doc);
+  }
+}
+
+function getOrganizerSlacks(doc) {
+
+  // from https://gist.github.com/gswalden/27ac96e497c3aa1f3230
+  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/;
+  var slacks = [];
+  
+  var body = doc.getBody();
+  var text = body.getText();
+  var matchArr = text.match("Slacks of all organizers.*\r\r(.+)");
+  if (matchArr !== null) {
+    match = matchArr[1];
+    match = match.replace(/[, ]/g, "\n"); // in case of a comma or space delimited list, replace with new line
+    var lines = match.split("\n");
+    
+    for (var i = 0; i < lines.length; i++) {
+      var slack = lines[i].trim();
+      if (slack_re.test(slack) && slacks.indexOf(slack) === -1) {
+        slacks.push(slack);
+      }
+    }
+  }
+  return(slacks);
+}
+
+function putResultsInDoc(doc, resultsStr) {
+  var body = doc.getBody();
+  Logger.log(body);
+  var text = body.findText("Instructions").getElement().asText();
+  text = text.editAsText();
+  text.insertText(0, "Results\n" +
+                      Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a") + ": " +
+                       resultsStr + "\n\n");
+}
+
+function turnOffEditAccess(doc) {
+  var id = doc.getId();
+  var file = DriveApp.getFileById(id);
+  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.EDIT);
+}
+
 function postResults(results) {
   results.forEach(function(e) {
-    var message = "*" + e.sentence + "*" +
+    var slackResultsStr = "*" + e.sentence + "*" +
       " (" + e.votes["yes"] + " yes, " + e.votes["no"] + " no, " + e.votes["stop"] + " stop)";
-    var apiMethod = "chat.postMessage?" +
-      "username=proposal-bot" +
-        "&icon_emoji=%3Afist%3A" +
-            "&link_names=1" +
-              "&thread_ts=" + e.thread_ts +
-                "&text=" + message +
-                  "&channel=%23proposalbot-test-prop";
+    var slackMessage = (slackResultsStr + " " + e.slacks.join(" ")).trim();
+    var apiMethod = "chat.postMessage" +
+      "?username=proposal-bot" +
+        "&icon_emoji=" + encodeURIComponent(":fist:") +
+          "&link_names=1" +
+            "&thread_ts=" + e.thread_ts +
+              "&text=" + encodeURIComponent(slackMessage) +
+                "&channel=" + encodeURIComponent("#proposalbot-test-prop");
     callSlackWebAPI(apiMethod, "post");
-    Logger.log([e.thread_ts, message].join(": "));
+    
+    if (e["doc"] !== null) {
+      var doc = e["doc"];
+      putResultsInDoc(doc, slackResultsStr.replace(/\*/g, ""));
+      turnOffEditAccess(doc);
+    }
+    
+    Logger.log([e.thread_ts, slackMessage].join(": "));
   });
 }
