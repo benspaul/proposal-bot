@@ -38,7 +38,7 @@ function onSubmit(e) {
   
   // announce on Slack
   var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
-  var dueDate = new Date().addDays(2);
+  var dueDate = new Date().addDays(2); // voting closes in 2 days
   announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
 }
 
@@ -77,29 +77,34 @@ function insertProposalTitle(doc, proposalTitle) {
 }
 
 function insertProposalText(doc, formResponse) {
-  // delete proposal text placeholder before inserting proposal text
+  // get proposal placeholder text
+  var placeholderRegex = "\\[insert proposal here\\]";
   var body = doc.getBody();
-  var text = body.findText("\\[insert proposal here\\]").getElement().asText();
-  text = text.deleteText(0, "[insert proposal here]".length - 1);
-  text = text.editAsText();
+  var element = body.findText(placeholderRegex).getElement();
+  var paragraph = element.getParent();
+  var paragraphIndex = body.getChildIndex(paragraph);
+  
+  // remove placeholder paragraph
+  paragraph.removeFromParent();
 
-  // insert question and answers, starting at question 1 (since question 0 was the title)  
-  var itemResponses = formResponse.getItemResponses();
-  var offset = 0;
-  for (var i = 1; i < itemResponses.length; i++) {
+  // exclude the first item response (it's the proposal title)
+  var itemResponses = formResponse.getItemResponses().slice(1);
+  
+  // only use filled in questions and answers
+  itemResponses = itemResponses.filter(function(r) {return r.getItem().getTitle().length > 0 && r.getResponse().length > 0;});
+
+  // insert in reverse order (due to how insert works)
+  itemResponses = itemResponses.reverse();
+
+  for (var i = 0; i < itemResponses.length; i++) {
     var itemResponse = itemResponses[i];
     var question = itemResponse.getItem().getTitle();
     var answer = itemResponse.getResponse();
-    if (question.length > 0 && answer.length > 0) { // only insert filled in questions
-      question += "\n\n";
-      if (i < itemResponses.length - 1) {
-        answer += "\n\n";
-      }
-      text.appendText(question + answer);
-      text.setBold(offset, offset + question.length - 1, true); // question is bold
-      text.setBold(offset + question.length, offset + question.length + answer.length - 1, false); // answer is not bold
-      offset += (question +  answer).length;
+    if (i > 0) {
+      body.insertParagraph(paragraphIndex, ""); // add empty space unless it's the first response
     }
+    body.insertParagraph(paragraphIndex, answer).setBold(false); // add answer
+    body.insertParagraph(paragraphIndex, question).setBold(true); // add question
   }
 }
 
