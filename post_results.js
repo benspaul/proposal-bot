@@ -1,11 +1,8 @@
 // need to have:
 // todo: add emails to email notification section of proposal doc
 // todo: don't post if final response is No or Maybe - just mention in proposals channel instead
-// todo: on post, prepend proposal file name with "Accepting Comments - "
-// todo: when posting results, rename proposal title to reflect results
 
 // nice to have:
-// todo: format official results when added to proposal document
 // todo: change postResults to use json rather than url form submit
 
 function processProposals() {
@@ -194,17 +191,34 @@ function getOrganizerSlacks(doc) {
   return(slacks);
 }
 
-function putResultsInDoc(doc, resultsStr) {
+function postResultsInDoc(doc, resultsStr) {
   var body = doc.getBody();
-  Logger.log(body);
-  var text = body.findText("Instructions").getElement().asText();
-  text = text.editAsText();
-  text.insertText(0, "Results\n" +
-                      Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a") + ": " +
-                       resultsStr + "\n\n");
+  
+  var newHeader = body.insertParagraph(1, "Results");
+  newHeader.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  
+  var resultsStrForDoc = Utilities.formatDate(new Date(), "US/Pacific", "M/d/YY") +
+    ": " +
+      resultsStr;   
+  
+  var newText = body.insertParagraph(2, resultsStrForDoc);
+  newText.setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  
+  // hacks
+  var proposalTitle = body.getChild(0).getText();
+  var resultsForTitle;
+  if (resultsStr.toLowerCase().indexOf("approved") !== -1) {
+    resultsForTitle = "Approved";
+  } else if (resultsStr.toLowerCase().indexOf("failed") !== -1) {
+    resultsForTitle = "Failed";
+  } else if (resultsStr.toLowerCase().indexOf("stopped") !== -1) {
+    resultsForTitle = "Stopped";
+  }
+ 
+  doc.setName(resultsForTitle + ": " + proposalTitle);
 }
 
-function turnOffEditAccess(doc) {
+function disableEditAccess(doc) {
   var id = doc.getId();
   var file = DriveApp.getFileById(id);
   file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.EDIT);
@@ -226,8 +240,8 @@ function postResults(results) {
     
     if (e["doc"] !== null) {
       var doc = e["doc"];
-      putResultsInDoc(doc, slackResultsStr.replace(/\*/g, ""));
-      turnOffEditAccess(doc);
+      postResultsInDoc(doc, slackResultsStr.replace(/\*/g, ""));
+      disableEditAccess(doc);
     }
     
     Logger.log([e.thread_ts, slackMessage].join(": "));
