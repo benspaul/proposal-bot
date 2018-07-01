@@ -69,7 +69,7 @@ function getProposalTitle(formResponse) {
 
 function insertProposalTitle(doc, proposalTitle) {
   // replace file title
-  doc.setName("TESTING PROPOSAL BOT - " + proposalTitle);
+  doc.setName("Accepting Comments: TESTING PROPOSAL BOT " + proposalTitle);
   
   // replace title heading
   var body = doc.getBody();
