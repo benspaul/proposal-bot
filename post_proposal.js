@@ -2,7 +2,7 @@ function resubmitTestResponse() {
   
   // get previously submitted test response
   var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
-  var formResponse = form.getResponse("2_ABaOnudjJ_PMr7G-0bLkyZP5N_cCCC3UEEvwoaC9CS_Y51qgUoGfLUBBqTRIOg");
+  var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
   Logger.log("Resubmitting form response for: " + formResponse.getEditResponseUrl());
   
   // mock a resubmission
@@ -19,6 +19,7 @@ function onSubmit(e) {
   var templateFileId = secrets["template_file_id"]; // link to [Template] doc
   var slackUrl = secrets["slack_incoming_webhook_url"]; // url to post to Slack
   var bitlyToken = secrets["bitly_token"];
+  var bitlyGroupGuid = secrets["bitly_group_guid"];
   
   var formResponse = e.response;
   
@@ -36,7 +37,7 @@ function onSubmit(e) {
   insertProposalText(newDoc, formResponse);
   
   // announce on Slack
-  var bitlyUrl = getBitlyUrl(bitlyToken, newUrl);
+  var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
   var dueDate = new Date().addDays(2);
   announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
 }
@@ -77,7 +78,7 @@ function insertProposalTitle(doc, proposalTitle) {
 
 function insertProposalText(doc, formResponse) {
   // delete proposal text placeholder before inserting proposal text
-  var body = doc.getBody()
+  var body = doc.getBody();
   var text = body.findText("\\[insert proposal here\\]").getElement().asText();
   text = text.deleteText(0, "[insert proposal here]".length - 1);
   text = text.editAsText();
@@ -102,17 +103,23 @@ function insertProposalText(doc, formResponse) {
   }
 }
 
-function getBitlyUrl(token, url) {
-  var encodedUrl = encodeURIComponent(url);
-  var getRequest = httpGet("https://api-ssl.bitly.com/v3/shorten?access_token=" + token + "&longUrl=" + encodedUrl);
-  var bitlyData = JSON.parse(getRequest);
-  var bitlyUrl = "bit.ly/" + bitlyData.data.hash;
+function getBitlyUrl(bitlyToken, bitlyGroupGuid, url) {
+  var payload = {
+    "long_url": url,
+    "group_guid": bitlyGroupGuid
+  };
+  var options =  {
+    "headers": {
+      "content-type" : "application/json",
+      "authorization" : "Bearer " + bitlyToken
+    },
+    "method": "post",
+    "payload" : JSON.stringify(payload)
+  };
+  var http = UrlFetchApp.fetch("https://api-ssl.bitly.com/v4/shorten", options);
+  var text = http.getContentText();
+  var bitlyUrl = JSON.parse(text)["id"];
   return(bitlyUrl);
-}
-
-function httpGet(url) {
-  var http = UrlFetchApp.fetch(url)
-  return http.getContentText();
 }
 
 function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
