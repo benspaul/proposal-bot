@@ -1,9 +1,3 @@
-// need to have:
-// todo: don't post if final response is No or Maybe - just mention in proposals channel instead
-
-// nice to have:
-// todo: change postResults to use json rather than url form submit
-
 function processProposals() {
   var nowPacificStr = Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a");
   var nowPacificTime = new Date(nowPacificStr);
@@ -174,7 +168,7 @@ function getOrganizerSlacks(doc) {
   
   var body = doc.getBody();
   var text = body.getText();
-  var matchArr = text.match("Slacks of all organizers.*\r\r(.+)");
+  var matchArr = text.match("Slacks of all organizers.*\n(.+)");
   if (matchArr !== null) {
     match = matchArr[1];
     match = match.replace(/[, ]/g, "\n"); // in case of a comma or space delimited list, replace with new line
