@@ -39,8 +39,16 @@ function onSubmit(e) {
   
   // announce on Slack
   var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
-  var dueDate = new Date().addDays(2); // voting closes in 2 days
-  announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
+  var isReady = isReadyToSubmit(formResponse);
+  if (isReady) {
+    var dueDate = new Date().addDays(2); // voting closes in 2 days
+    announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
+  } else {
+    newDoc.saveAndClose();
+    var newDoc2 = DocumentApp.openById(newId);
+    var slacks = getOrganizerSlacks(newDoc2); // hack since we have this method in post_results when reading from a document
+    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks); // WIP
+  }
 }
 
 Date.prototype.addDays = function(days) {
@@ -48,6 +56,28 @@ Date.prototype.addDays = function(days) {
   var dat = new Date(this.valueOf());
   dat.setDate(dat.getDate() + days);
   return dat;
+}
+
+function isReadyToSubmit(formResponse) {
+  var isReadyToSubmit = false; // default to not ready
+  var itemResponses = formResponse.getItemResponses();
+  
+  // get ready-to-submit form response if there is one
+  itemResponses = itemResponses.filter(function(r) {return r.getItem().getTitle().length > 0 &&
+                                                            r.getResponse().length > 0 &&
+                                                              r.getItem().getTitle().toLowerCase().indexOf("are you ready to submit a final version") !== -1;
+                                                   });
+ 
+  if (itemResponses.length > 0)
+  {
+    var itemResponse = itemResponses[0]; // if somehow there are multiple, only use first
+    isReadyToSubmit = itemResponse.getResponse().toLowerCase().trim() === "yes";
+  }
+  
+  Logger.log("Ready to submit: " + isReadyToSubmit);
+  
+  return(isReadyToSubmit);
+  
 }
 
 function copyTemplateFile(templateFileId) {
@@ -186,4 +216,23 @@ function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
   proposalsPayload['text'] = proposalsText;
   proposalsPayload['channel'] = "#proposalbot-test-prop",
   callAPI(slackUrl, proposalsPayload, "post");
+}
+
+function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks) {
+  
+  var payload = {
+    "username" : "proposal-bot",
+    "icon_emoji": ":fist:",
+    "link_names": 1,
+    "channel" : "#proposalbot-test-inbx",
+    "text": "@channel Someone posted a proposal but would like some help before announcing it officially.\n\n" +
+             "*Name:* _" + proposalTitle + "_\n\n" +
+              "*Link to tentative proposal:* " + bitlyUrl
+  };
+  
+  if (slacks.length > 0) {
+    payload["text"] += "\n\n*Organizers:* " + slacks.join(" ");
+  }
+  
+  callAPI(slackUrl, payload, "post");
 }
