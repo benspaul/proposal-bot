@@ -125,10 +125,9 @@ function insertProposalOrganizerEmails(doc, formResponse) {
                                                               r.getItem().getTitle().toLowerCase().indexOf("emails of all organizers") !== -1;
                                                    });
   
-  // if somehow there are multiple, only use first
   if (itemResponses.length > 0)
   {
-    var itemResponse = itemResponses[0];
+    var itemResponse = itemResponses[0]; // if somehow there are multiple, only use first
     var question = itemResponse.getItem().getTitle();
     var answer = itemResponse.getResponse();
     // insert blank
