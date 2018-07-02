@@ -1,5 +1,4 @@
 function callSlackWebAPI(apiMethod, httpMethod) {
-  // todo: get params to work instead of query strings embedded in apiMethod variable
   var secrets = getSecrets();
   var url = "https://slack.com/api/" + apiMethod + "&token=" + secrets["slack_token"];
   var http = callAPI(url, {}, httpMethod);
