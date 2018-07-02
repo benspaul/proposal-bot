@@ -1,189 +1,242 @@
-function resubmitTestResponse() {
+function processProposals() {
+  var nowPacificStr = Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a");
+  var nowPacificTime = new Date(nowPacificStr);
   
-  // get previously submitted test response
-  var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
-  var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
-  Logger.log("Resubmitting form response for: " + formResponse.getEditResponseUrl());
-  
-  // mock a resubmission
-  var e = {};
-  e.response = formResponse;
-  
-  // run onSubmit with mock resubmission
-  onSubmit(e);
+  var messages = getProposalsChannelMessages();
+  var results = getResultsToPost(messages, nowPacificTime);
+  postResults(results);
 }
 
-function onSubmit(e) {
+function getProposalsChannelMessages() {
+  var proposalsChannelName = "proposalbot-test-prop";
   
-  var secrets = getSecrets(); // in separate file
-  var templateFileId = secrets["template_file_id"]; // link to [Template] doc
-  var slackUrl = secrets["slack_incoming_webhook_url"]; // url to post to Slack
-  var bitlyToken = secrets["bitly_token"];
-  var bitlyGroupGuid = secrets["bitly_group_guid"];
+  var channels = callSlackWebAPI("channels.list?exclude_members=true", "get")["channels"];
+  var proposalsChannelId = channels.filter(function(c) {return c["name"] === proposalsChannelName})[0]["id"];
   
-  var formResponse = e.response;
-  
-  // get proposal title
-  var proposalTitle = getProposalTitle(formResponse);
-  
-  // copy proposal template to new doc
-  var newFile = copyTemplateFile(templateFileId);
-  var newId = newFile.getId();
-  var newUrl = newFile.getUrl();
-  var newDoc = DocumentApp.openById(newId);
-  
-  // put proposal in new doc
-  insertProposalTitle(newDoc, proposalTitle);
-  insertProposalText(newDoc, formResponse);
-  insertProposalOrganizerEmails(newDoc, formResponse);
-  
-  // announce on Slack
-  var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
-  var dueDate = new Date().addDays(2); // voting closes in 2 days
-  announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
+  var messages = callSlackWebAPI("channels.history?channel=" + proposalsChannelId, "get")["messages"];
+  return(messages);
 }
 
-Date.prototype.addDays = function(days) {
-  // source: https://stackoverflow.com/a/563442
-  var dat = new Date(this.valueOf());
-  dat.setDate(dat.getDate() + days);
-  return dat;
-}
-
-function copyTemplateFile(templateFileId) {
-  var templateFile = DriveApp.getFileById(templateFileId);
-  var newFile = templateFile.makeCopy("TESTING PROPOSAL BOT");
-  newFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
-  return(newFile);
-}
-
-function getProposalTitle(formResponse) {
-  // title must be first answer
-  var proposalTitle = "Untitled";
-  var itemResponses = formResponse.getItemResponses();
-  var firstAnswer = itemResponses[0].getResponse();
-  if (firstAnswer.length > 0) {
-    proposalTitle = firstAnswer;
-  }
-  return(proposalTitle);
-}
-
-function insertProposalTitle(doc, proposalTitle) {
-  // replace file title
-  doc.setName("Accepting Comments: TESTING PROPOSAL BOT " + proposalTitle);
+function getResultsToPost(messages, referenceDate) {
+  // restrict to messages with voting due date
+  var messages = getMessagesThatHaveVotingDueDates(messages);
   
-  // replace title heading
-  var body = doc.getBody();
-  body.replaceText("Proposal Title", proposalTitle);
-}
-
-function insertProposalText(doc, formResponse) {
-  // get proposal placeholder text
-  var placeholderRegex = "\\[insert proposal here\\]";
-  var body = doc.getBody();
-  var element = body.findText(placeholderRegex).getElement();
-  var paragraph = element.getParent();
-  var paragraphIndex = body.getChildIndex(paragraph);
+  // and due date must be in past
+  messages = messages.filter(function(m) {return m.dueDate < referenceDate;});
   
-  // remove placeholder paragraph
-  paragraph.removeFromParent();
-
-  // exclude the first item response (it's the proposal title)
-  var itemResponses = formResponse.getItemResponses().slice(1);
+  // and proposal bot must not have commented on it yet
+  messages = messages.filter(
+    function(m) {
+      return !(m.replies && m.replies.some(function(r) {return r.user === "B00";}))
+    });
   
-  // only use filled in questions and answers
-  itemResponses = itemResponses.filter(function(r) {return r.getItem().getTitle().length > 0 && r.getResponse().length > 0;});
-
-  // insert in reverse order (due to how insert works)
-  itemResponses = itemResponses.reverse();
-
-  for (var i = 0; i < itemResponses.length; i++) {
-    var itemResponse = itemResponses[i];
-    var question = itemResponse.getItem().getTitle();
-    var answer = itemResponse.getResponse();
-    if (i > 0) {
-      body.insertParagraph(paragraphIndex, ""); // add empty space unless it's the first response
+  // get results for each qualified message
+  var resultsToPost = [];
+  for (var i = 0; i < messages.length; i++) {
+    var votes = parseVotes(messages[i]["reactions"]);
+    var results = processVotes(votes);
+    var sentence = convertResultsToSentence(results);
+    var ts = messages[i]["ts"]; // timestamp represents message when threading
+    resultsToPost[i] = {"thread_ts": ts, "votes": votes, "results": results, "sentence": sentence};
+    
+    // add proposal doc info
+    var doc = getProposalDoc(messages[i]);
+    if (doc !== null) {
+      resultsToPost[i]["doc"] = doc;
+      resultsToPost[i]["slacks"] = getOrganizerSlacks(doc);
     }
-    body.insertParagraph(paragraphIndex, answer).setBold(false); // add answer
-    body.insertParagraph(paragraphIndex, question).setBold(true); // add question
+  }
+  return(resultsToPost);
+}
+
+function getMessagesThatHaveVotingDueDates(messages) {
+  var dueDateRegex = "\\*Comment period closes:\\* (.+) Pacific Time";
+  var messagesWithDueDates = [];
+  
+  for (var i = 0; i < messages.length; i++) {
+    var dueDateMatch = messages[i]["text"].match(dueDateRegex);
+    if (dueDateMatch !== null) {
+      var dueDateStr = dueDateMatch[1];
+      var dueDate = new Date(dueDateStr); // Google Apps Scripts can't handle time zones with new Date: https://issuetracker.google.com/issues/36757698
+      messages[i]["dueDate"] = dueDate;
+      messagesWithDueDates.push(messages[i]);
+    }
+  }
+  return(messagesWithDueDates);
+}
+
+function parseVotes(reactionsArr) {
+  // initialize vote count
+  var votes = {yes: 0, no: 0, stop: 0};
+  
+  // if no reactions then there were no votes
+  if (reactionsArr === undefined)
+    return votes;
+
+  // for each reaction type, increment vote count accordingly
+  // note that if an individual votes yes for several skin tones, they will be counted multiple times
+  // but this has not been an issue so far
+  for (var i = 0; i < reactionsArr.length; i++) {
+    var reactionType = reactionsArr[i];
+    var reactionName = reactionType["name"];
+    var reactionCount = reactionType["count"];
+
+    // votes for yes begin with +1 for all skin tones
+    // or contain thumbsup
+    if (reactionName.substr(0, 2) === "+1"
+        || reactionName.toLowerCase().indexOf("thumbsup") !== -1) {
+      votes["yes"] += reactionCount;
+
+    // votes for no begin with -1 for all skin tones
+    // or contain thumbsdown
+    } else if (reactionName.substr(0, 2) === "-1"
+               || reactionName.toLowerCase().indexOf("thumbsdown") !== -1) {
+      votes["no"] += reactionCount;
+
+    // votes for stop must use stop or octagonal_sign emoji
+    } else if (["stop", "octagonal_sign"].indexOf(reactionName.toLowerCase()) !== -1) {
+      votes["stop"] += reactionCount;
+    }
+  }
+
+  return(votes);
+}
+
+function processVotes(votes) {
+  if (
+    typeof(votes["yes"]) !== "number"
+    || typeof(votes["no"]) !== "number"
+    || typeof(votes["stop"]) !== "number"
+  ) {
+    throw new Error("Invalid yes, no, or stop vote counts");
+  }
+  
+  var yesVotes = votes["yes"];
+  var noVotes = votes["no"];
+  var stopVotes = votes["stop"];
+  var totalVotes = yesVotes + noVotes + stopVotes;
+  var votesToApprove = Math.floor(totalVotes * 0.5) + 1;
+  
+  if (stopVotes >= 1) {
+    return("stop");
+  }
+  
+  if (yesVotes >= votesToApprove) {
+    return("approve");
+  }
+  
+  return("fail");
+}
+
+function convertResultsToSentence(results) {
+  var sentence;
+
+  if (results === "approve") {
+    sentence = "Approved!";
+
+  } else if (results === "fail") {
+    sentence = "The proposal failed.";
+
+  } else if (results === "stop") {
+    sentence = "The proposal has been stopped. We are confirming the objection is grounded in our official documents and if so, whether it can be resolved."
+  }
+
+  return(sentence);
+}
+
+function getProposalDoc(message) {
+
+  var urlRegex = "\\*Link to proposal:\\* <*([^\\|]+)";
+  var urlMatch = message["text"].match(urlRegex);
+  
+  if (urlMatch !== null) {
+    var url = urlMatch[1];
+    // if url is bitly, get url from redirect
+    if (url.indexOf("bit.ly") !== -1) {
+      url = UrlFetchApp.fetch(url, {followRedirects: false}).getAllHeaders()["Location"];
+    }
+    var doc = DocumentApp.openByUrl(url);
+    return(doc);
   }
 }
 
-function insertProposalOrganizerEmails(doc, formResponse) {
-  var itemResponses = formResponse.getItemResponses();
+function getOrganizerSlacks(doc) {
+
+  // from https://gist.github.com/gswalden/27ac96e497c3aa1f3230
+  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/;
+  var slacks = [];
   
-  // get end of emails template text
-  var placeholderRegex = "\\[end emails\\]";
   var body = doc.getBody();
-  var element = body.findText(placeholderRegex).getElement();
-  var paragraph = element.getParent();
-  var paragraphIndex = body.getChildIndex(paragraph);
-  
-  // get emails form response if there is one
-  itemResponses = itemResponses.filter(function(r) {return r.getItem().getTitle().length > 0 &&
-                                                            r.getResponse().length > 0 &&
-                                                              r.getItem().getTitle().toLowerCase().indexOf("emails of all organizers") !== -1;
-                                                   });
-  
-  if (itemResponses.length > 0)
-  {
-    var itemResponse = itemResponses[0]; // if somehow there are multiple, only use first
-    var question = itemResponse.getItem().getTitle();
-    var answer = itemResponse.getResponse();
-    // insert blank
-    body.insertParagraph(paragraphIndex, "");
-    // insert emails
-    body.insertParagraph(paragraphIndex, answer);
+  var text = body.getText();
+  var matchArr = text.match("Slacks of all organizers.*\n(.+)");
+  if (matchArr !== null) {
+    match = matchArr[1];
+    match = match.replace(/[, ]/g, "\n"); // in case of a comma or space delimited list, replace with new line
+    var lines = match.split("\n");
+    
+    for (var i = 0; i < lines.length; i++) {
+      var slack = lines[i].trim();
+      if (slack_re.test(slack) && slacks.indexOf(slack) === -1) {
+        slacks.push(slack);
+      }
+    }
   }
+  return(slacks);
 }
 
-function getBitlyUrl(bitlyToken, bitlyGroupGuid, url) {
-  var payload = {
-    "long_url": url,
-    "group_guid": bitlyGroupGuid
-  };
-  var options =  {
-    "headers": {
-      "content-type" : "application/json",
-      "authorization" : "Bearer " + bitlyToken
-    },
-    "method": "post",
-    "payload" : JSON.stringify(payload)
-  };
-  var http = UrlFetchApp.fetch("https://api-ssl.bitly.com/v4/shorten", options);
-  var text = http.getContentText();
-  var bitlyUrl = JSON.parse(text)["id"];
-  return(bitlyUrl);
+function postResultsInDoc(doc, resultsStr) {
+  var body = doc.getBody();
+  
+  var newHeader = body.insertParagraph(1, "Results");
+  newHeader.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  
+  var resultsStrForDoc = Utilities.formatDate(new Date(), "US/Pacific", "M/d/YY") +
+    ": " +
+      resultsStr;   
+  
+  var newText = body.insertParagraph(2, resultsStrForDoc);
+  newText.setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  
+  // hacks
+  var proposalTitle = body.getChild(0).getText();
+  var resultsForTitle;
+  if (resultsStr.toLowerCase().indexOf("approved") !== -1) {
+    resultsForTitle = "Approved";
+  } else if (resultsStr.toLowerCase().indexOf("failed") !== -1) {
+    resultsForTitle = "Failed";
+  } else if (resultsStr.toLowerCase().indexOf("stopped") !== -1) {
+    resultsForTitle = "Stopped";
+  }
+ 
+  doc.setName(resultsForTitle + ": " + proposalTitle);
 }
 
-function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
-  var dueDateStr = Utilities.formatDate(dueDate, "US/Pacific", "EEE, MMM d, YYYY, h:mm a 'Pacific Time'");
-  
-  var payload = {
-    "username" : "proposal-bot",
-    "icon_emoji": ":fist:",
-    "link_names": 1
-  };
-  
-  var announceText = "A new proposal has been posted!\n\n" +
-              "*Name:* _" + proposalTitle + "_\n\n" +
-              "*Comment period closes*: " + dueDateStr + "\n\n" +
-              "*How can you participate in the proposal process?*\n\n" +
-              "Head over to #proposals and follow the quick directions. I expect it’ll take less than 5 mins to read, comment (if you want), and vote on the proposal. Head to #proposal_inbox if you have any questions or problems.";
-  
-  var announcePayload = payload;
-  announcePayload['text'] = announceText;
-  announcePayload['channel'] = "#proposalbot-test-annc",
-  callAPI(slackUrl, announcePayload, "post");
-  
-  var proposalsText = "A new proposal has been posted!\n\n" +
-      "Place your emoji vote (:+1: / :-1: / :stop:) on this post. Please do not comment in this channel. Comment in the *Comments* section at the bottom of the Google Doc linked below. Please head over to #proposal_inbox if you have any questions about this process.\n\n" +
-        "*Name:* _" + proposalTitle + "_\n\n" + 
-          "*Comment period closes:* " + dueDateStr + "\n\n" +
-            "*Link to proposal:* " + bitlyUrl;
-  
-  var proposalsPayload = payload;
-  proposalsPayload['text'] = proposalsText;
-  proposalsPayload['channel'] = "#proposalbot-test-prop",
-  callAPI(slackUrl, proposalsPayload, "post");
+function disableEditAccess(doc) {
+  var id = doc.getId();
+  var file = DriveApp.getFileById(id);
+  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.EDIT);
+}
+
+function postResults(results) {
+  results.forEach(function(e) {
+    var slackResultsStr = "*" + e.sentence + "*" +
+      " (" + e.votes["yes"] + " yes, " + e.votes["no"] + " no, " + e.votes["stop"] + " stop)";
+    var slackMessage = (slackResultsStr + " " + e.slacks.join(" ")).trim();
+    var apiMethod = "chat.postMessage" +
+      "?username=proposal-bot" +
+        "&icon_emoji=" + encodeURIComponent(":fist:") +
+          "&link_names=1" +
+            "&thread_ts=" + e.thread_ts +
+              "&text=" + encodeURIComponent(slackMessage) +
+                "&channel=" + encodeURIComponent("#proposalbot-test-prop");
+    callSlackWebAPI(apiMethod, "post");
+    
+    if (e["doc"] !== null) {
+      var doc = e["doc"];
+      postResultsInDoc(doc, slackResultsStr.replace(/\*/g, ""));
+      disableEditAccess(doc);
+    }
+    
+    Logger.log([e.thread_ts, slackMessage].join(": "));
+  });
 }
