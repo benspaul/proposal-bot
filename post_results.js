@@ -41,7 +41,7 @@ function getResultsToPost(messages, referenceDate) {
     
     // add proposal doc info
     var doc = getProposalDoc(messages[i]);
-    if (doc !== null) {
+    if (doc !== undefined) {
       resultsToPost[i]["doc"] = doc;
       resultsToPost[i]["slacks"] = getOrganizerSlacks(doc);
     }
