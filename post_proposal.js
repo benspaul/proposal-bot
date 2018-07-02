@@ -44,10 +44,8 @@ function onSubmit(e) {
     var dueDate = new Date().addDays(2); // voting closes in 2 days
     announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
   } else {
-    newDoc.saveAndClose();
-    var newDoc2 = DocumentApp.openById(newId);
-    var slacks = getOrganizerSlacks(newDoc2); // hack since we have this method in post_results when reading from a document
-    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks); // WIP
+    var slacks = getOrganizerSlacks(newDoc); // hack since we have this method in post_results when reading from a document
+    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks);
   }
 }
 
