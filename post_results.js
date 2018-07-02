@@ -1,5 +1,4 @@
 // need to have:
-// todo: add emails to email notification section of proposal doc
 // todo: don't post if final response is No or Maybe - just mention in proposals channel instead
 
 // nice to have:
