@@ -35,6 +35,7 @@ function onSubmit(e) {
   // put proposal in new doc
   insertProposalTitle(newDoc, proposalTitle);
   insertProposalText(newDoc, formResponse);
+  insertProposalOrganizerEmails(newDoc, formResponse);
   
   // announce on Slack
   var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
@@ -105,6 +106,35 @@ function insertProposalText(doc, formResponse) {
     }
     body.insertParagraph(paragraphIndex, answer).setBold(false); // add answer
     body.insertParagraph(paragraphIndex, question).setBold(true); // add question
+  }
+}
+
+function insertProposalOrganizerEmails(doc, formResponse) {
+  var itemResponses = formResponse.getItemResponses();
+  
+  // get end of emails template text
+  var placeholderRegex = "\\[end emails\\]";
+  var body = doc.getBody();
+  var element = body.findText(placeholderRegex).getElement();
+  var paragraph = element.getParent();
+  var paragraphIndex = body.getChildIndex(paragraph);
+  
+  // get emails form response if there is one
+  itemResponses = itemResponses.filter(function(r) {return r.getItem().getTitle().length > 0 &&
+                                                            r.getResponse().length > 0 &&
+                                                              r.getItem().getTitle().toLowerCase().indexOf("emails of all organizers") !== -1;
+                                                   });
+  
+  // if somehow there are multiple, only use first
+  if (itemResponses.length > 0)
+  {
+    var itemResponse = itemResponses[0];
+    var question = itemResponse.getItem().getTitle();
+    var answer = itemResponse.getResponse();
+    // insert blank
+    body.insertParagraph(paragraphIndex, "");
+    // insert emails
+    body.insertParagraph(paragraphIndex, answer);
   }
 }
 
