@@ -8,7 +8,7 @@ function processProposals() {
 }
 
 function getProposalsChannelMessages() {
-  var proposalsChannelName = "proposalbot-test-prop";
+  var proposalsChannelName = "proposals";
   
   var channels = callSlackWebAPI("channels.list?exclude_members=true", "get")["channels"];
   var proposalsChannelId = channels.filter(function(c) {return c["name"] === proposalsChannelName})[0]["id"];
@@ -228,7 +228,7 @@ function postResults(results) {
           "&link_names=1" +
             "&thread_ts=" + e.thread_ts +
               "&text=" + encodeURIComponent(slackMessage) +
-                "&channel=" + encodeURIComponent("#proposalbot-test-prop");
+                "&channel=" + encodeURIComponent("#proposals");
     callSlackWebAPI(apiMethod, "post");
     
     if (e["doc"] !== null) {
