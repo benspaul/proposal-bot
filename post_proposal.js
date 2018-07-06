@@ -80,7 +80,7 @@ function isReadyToSubmit(formResponse) {
 
 function copyTemplateFile(templateFileId) {
   var templateFile = DriveApp.getFileById(templateFileId);
-  var newFile = templateFile.makeCopy("TESTING PROPOSAL BOT");
+  var newFile = templateFile.makeCopy("Untitled");
   newFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
   return(newFile);
 }
@@ -98,7 +98,7 @@ function getProposalTitle(formResponse) {
 
 function insertProposalTitle(doc, proposalTitle) {
   // replace file title
-  doc.setName("Accepting Comments: TESTING PROPOSAL BOT " + proposalTitle);
+  doc.setName("Accepting Comments: " + proposalTitle);
   
   // replace title heading
   var body = doc.getBody();
@@ -201,7 +201,7 @@ function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
   
   var announcePayload = payload;
   announcePayload['text'] = announceText;
-  announcePayload['channel'] = "#proposalbot-test-annc",
+  announcePayload['channel'] = "#announcements",
   callAPI(slackUrl, announcePayload, "post");
   
   var proposalsText = "A new proposal has been posted!\n\n" +
@@ -212,7 +212,7 @@ function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
   
   var proposalsPayload = payload;
   proposalsPayload['text'] = proposalsText;
-  proposalsPayload['channel'] = "#proposalbot-test-prop",
+  proposalsPayload['channel'] = "#proposals",
   callAPI(slackUrl, proposalsPayload, "post");
 }
 
@@ -222,7 +222,7 @@ function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks) {
     "username" : "proposal-bot",
     "icon_emoji": ":fist:",
     "link_names": 1,
-    "channel" : "#proposalbot-test-inbx",
+    "channel" : "#proposal_inbox",
     "text": "@channel Someone posted a proposal but would like some help before announcing it officially.\n\n" +
              "*Name:* _" + proposalTitle + "_\n\n" +
               "*Link to tentative proposal:* " + bitlyUrl
