@@ -214,7 +214,7 @@ function postResultsInDoc(doc, resultsStr) {
 function disableEditAccess(doc) {
   var id = doc.getId();
   var file = DriveApp.getFileById(id);
-  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.EDIT);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 }
 
 function postResults(results) {
