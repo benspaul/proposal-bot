@@ -46,7 +46,7 @@ function getResultsToPost(messages, referenceDate) {
       resultsToPost[i]["slacks"] = getOrganizerSlacks(doc);
     }
   }
-  Logger.log("Found " + resultsToPost.length + " results to post");
+  console.log("Found " + resultsToPost.length + " results to post");
   return(resultsToPost);
 }
 
@@ -238,6 +238,6 @@ function postResults(results) {
       disableEditAccess(doc);
     }
     
-    Logger.log([e.thread_ts, slackMessage].join(": "));
+    console.log([e.thread_ts, slackMessage].join(": "));
   });
 }
