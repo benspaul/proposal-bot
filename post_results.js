@@ -46,6 +46,7 @@ function getResultsToPost(messages, referenceDate) {
       resultsToPost[i]["slacks"] = getOrganizerSlacks(doc);
     }
   }
+  Logger.log("Found " + resultsToPost.length + " results to post");
   return(resultsToPost);
 }
 
