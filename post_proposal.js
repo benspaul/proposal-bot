@@ -3,7 +3,7 @@ function resubmitTestResponse() {
   // get previously submitted test response
   var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
   var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
-  Logger.log("Resubmitting form response for: " + formResponse.getEditResponseUrl());
+  console.log("Resubmitting form response for: " + formResponse.getEditResponseUrl());
   
   // mock a resubmission
   var e = {};
@@ -72,7 +72,7 @@ function isReadyToSubmit(formResponse) {
     isReadyToSubmit = itemResponse.getResponse().toLowerCase().trim() === "yes";
   }
   
-  Logger.log("Ready to submit: " + isReadyToSubmit);
+  console.log("Ready to submit: " + isReadyToSubmit);
   
   return(isReadyToSubmit);
   
