@@ -1,16 +1,15 @@
-function resubmitTestResponse() {
+function resubmitResponse() {
   
-  // get previously submitted test response
   var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
-  var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
-  console.log("Resubmitting form response for: " + formResponse.getEditResponseUrl());
+  var responses = form.getResponses();
   
-  // mock a resubmission
-  var e = {};
-  e.response = formResponse;
+  // get most recently submitted response
+  var latestResponse = responses[responses.length - 1];
+  Logger.log(latestResponse.getId());
+  Logger.log(latestResponse.getEditResponseUrl());
   
   // run onSubmit with mock resubmission
-  onSubmit(e);
+//  onSubmit(e);
 }
 
 function onSubmit(e) {
