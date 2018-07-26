@@ -18,6 +18,9 @@ function getProposalsChannelMessages() {
 }
 
 function getResultsToPost(messages, referenceDate) {
+  
+  var proposalBotUserId = "BBCDXF8MP"; // the user id the proposal bot is assigned when posting results
+  
   // restrict to messages with voting due date
   var messages = getMessagesThatHaveVotingDueDates(messages);
   
@@ -27,7 +30,7 @@ function getResultsToPost(messages, referenceDate) {
   // and proposal bot must not have commented on it yet
   messages = messages.filter(
     function(m) {
-      return !(m.replies && m.replies.some(function(r) {return r.user === "B00";}))
+      return !(m.replies && m.replies.some(function(r) {return r.user === proposalBotUserId;}))
     });
   
   // get results for each qualified message
