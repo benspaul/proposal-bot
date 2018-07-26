@@ -1,15 +1,28 @@
-function resubmitResponse() {
+function resubmitLastResponse() {
   
   var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
-  var responses = form.getResponses();
   
   // get most recently submitted response
-  var latestResponse = responses[responses.length - 1];
-  Logger.log(latestResponse.getId());
-  Logger.log(latestResponse.getEditResponseUrl());
+  var responses = form.getResponses();
+  var formResponse = responses[responses.length - 1];
+  Logger.log(formResponse.getId());
+  Logger.log(formResponse.getEditResponseUrl());
   
   // run onSubmit with mock resubmission
-//  onSubmit(e);
+  // onSubmit(e);
+}
+
+function resubmitTestResponse() {
+  
+  var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
+  
+  // get test response
+  var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
+  Logger.log(formResponse.getId());
+  Logger.log(formResponse.getEditResponseUrl());
+  
+  // run onSubmit with mock resubmission
+  // onSubmit(e);
 }
 
 function onSubmit(e) {
@@ -44,7 +57,8 @@ function onSubmit(e) {
     announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
   } else {
     var slacks = getOrganizerSlacks(newDoc); // hack since we have this method in post_results when reading from a document
-    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks);
+    var editUrl = formResponse.getEditResponseUrl();
+    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, editUrl, slacks);
   }
 }
 
@@ -215,7 +229,7 @@ function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
   callAPI(slackUrl, proposalsPayload, "post");
 }
 
-function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks) {
+function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, editUrl, slacks) {
   
   var payload = {
     "username" : "proposal-bot",
@@ -224,7 +238,8 @@ function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, slacks) {
     "channel" : "#proposal_inbox",
     "text": "@channel Someone posted a proposal but would like some help before announcing it officially.\n\n" +
              "*Name:* _" + proposalTitle + "_\n\n" +
-              "*Link to tentative proposal:* " + bitlyUrl
+              "*Link to tentative proposal:* " + bitlyUrl + "\n\n" +
+               "*Link to edit and submit proposal:* " + editUrl
   };
   
   if (slacks.length > 0) {
