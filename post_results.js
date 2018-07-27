@@ -167,7 +167,8 @@ function getProposalDoc(message) {
 function getOrganizerSlacks(doc) {
 
   // from https://gist.github.com/gswalden/27ac96e497c3aa1f3230
-  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/;
+  // except Slack now allows any casing
+  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/i;
   var slacks = [];
   
   var body = doc.getBody();
