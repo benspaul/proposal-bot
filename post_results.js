@@ -167,8 +167,7 @@ function getProposalDoc(message) {
 function getOrganizerSlacks(doc) {
 
   // from https://gist.github.com/gswalden/27ac96e497c3aa1f3230
-  // except Slack now allows any casing
-  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/i;
+  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/;
   var slacks = [];
   
   var body = doc.getBody();
@@ -180,7 +179,7 @@ function getOrganizerSlacks(doc) {
     var lines = match.split("\n");
     
     for (var i = 0; i < lines.length; i++) {
-      var slack = lines[i].trim();
+      var slack = lines[i].toLowerCase().trim();
       if (slack_re.test(slack) && slacks.indexOf(slack) === -1) {
         slacks.push(slack);
       }
