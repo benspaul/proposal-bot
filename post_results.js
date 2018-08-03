@@ -1,4 +1,4 @@
-function processProposals() {
+function processProposalResults() {
   var nowPacificStr = Utilities.formatDate(new Date(), "US/Pacific", "EEE, MMM d, YYYY, h:mm a");
   var nowPacificTime = new Date(nowPacificStr);
   
@@ -8,7 +8,8 @@ function processProposals() {
 }
 
 function getProposalsChannelMessages() {
-  var proposalsChannelName = "proposals";
+  var config = getConfig();
+  var proposalsChannelName = config["proposals_channel_name"];
   
   var channels = callSlackWebAPI("channels.list?exclude_members=true", "get")["channels"];
   var proposalsChannelId = channels.filter(function(c) {return c["name"] === proposalsChannelName})[0]["id"];
@@ -19,19 +20,21 @@ function getProposalsChannelMessages() {
 
 function getResultsToPost(messages, referenceDate) {
   
-  var proposalBotUserId = "BBCDXF8MP"; // the user id the proposal bot is assigned when posting results
+  var config = getConfig();
+  var proposalBotUserIdRegex = config["proposal_bot_user_id_regex"];
+  var proposalBotUsername = config["proposal_bot_username"];
   
-  // restrict to messages with voting due date
-  var messages = getMessagesThatHaveVotingDueDates(messages);
+  // restrict to messages from username proposal-bot
+  var messages = messages.filter(function(m) {return m.username === proposalBotUsername});
+  
+  // and message must have voting due date
+  messages = getMessagesThatHaveVotingDueDates(messages);
   
   // and due date must be in past
   messages = messages.filter(function(m) {return m.dueDate < referenceDate;});
   
   // and proposal bot must not have commented on it yet
-  messages = messages.filter(
-    function(m) {
-      return !(m.replies && m.replies.some(function(r) {return r.user === proposalBotUserId;}))
-    });
+  messages = getMessagesThatProposalBotHasNotCommented(messages, proposalBotUserIdRegex);
   
   // get results for each qualified message
   var resultsToPost = [];
@@ -69,6 +72,15 @@ function getMessagesThatHaveVotingDueDates(messages) {
   return(messagesWithDueDates);
 }
 
+function getMessagesThatProposalBotHasNotCommented(messages, proposalBotUserIdRegex) {
+  var messages = messages.filter(
+    function(m) {
+      // it must not be the case that there are already one or more replies from proposal bot
+      return !(m.replies && m.replies.some(function(r) {return r.user && r.user.match(proposalBotUserIdRegex) !== null;}))
+    });
+  return(messages);
+}
+
 function parseVotes(reactionsArr) {
   // initialize vote count
   var votes = {yes: 0, no: 0, stop: 0};
@@ -97,8 +109,8 @@ function parseVotes(reactionsArr) {
                || reactionName.toLowerCase().indexOf("thumbsdown") !== -1) {
       votes["no"] += reactionCount;
 
-    // votes for stop must use stop or octagonal_sign emoji
-    } else if (["stop", "octagonal_sign"].indexOf(reactionName.toLowerCase()) !== -1) {
+    // votes for stop must use stop, police_stop, or octagonal_sign emoji
+    } else if (["stop", "police_stop", "octagonal_sign"].indexOf(reactionName.toLowerCase()) !== -1) {
       votes["stop"] += reactionCount;
     }
   }
@@ -167,7 +179,7 @@ function getProposalDoc(message) {
 function getOrganizerSlacks(doc) {
 
   // from https://gist.github.com/gswalden/27ac96e497c3aa1f3230
-  var slack_re = /^@[a-z0-9][a-z0-9._-]*$/;
+  var slackRegex = /^@[a-z0-9][a-z0-9._-]*$/;
   var slacks = [];
   
   var body = doc.getBody();
@@ -180,7 +192,7 @@ function getOrganizerSlacks(doc) {
     
     for (var i = 0; i < lines.length; i++) {
       var slack = lines[i].toLowerCase().trim();
-      if (slack_re.test(slack) && slacks.indexOf(slack) === -1) {
+      if (slackRegex.test(slack) && slacks.indexOf(slack) === -1) {
         slacks.push(slack);
       }
     }
@@ -222,17 +234,29 @@ function disableEditAccess(doc) {
 }
 
 function postResults(results) {
+  var config = getConfig();
+  var proposalsChannelName = config["proposals_channel_name"];
   results.forEach(function(e) {
     var slackResultsStr = "*" + e.sentence + "*" +
       " (" + e.votes["yes"] + " yes, " + e.votes["no"] + " no, " + e.votes["stop"] + " stop)";
     var slackMessage = (slackResultsStr + " " + e.slacks.join(" ")).trim();
+    
+    // get emoji corresponding to results
+    var iconEmoji = ":fist:"; // default
+    if (e.results === "approve") {
+      iconEmoji = ":thumbsup:";
+    } else if (e.results === "fail") {
+      iconEmoji = ":thumbsdown:";
+    } else if (e.results === "stop") {
+      iconEmoji = ":stop:";
+    }
+    
     var apiMethod = "chat.postMessage" +
-      "?username=proposal-bot" +
-        "&icon_emoji=" + encodeURIComponent(":fist:") +
-          "&link_names=1" +
+          "?link_names=1" +
             "&thread_ts=" + e.thread_ts +
               "&text=" + encodeURIComponent(slackMessage) +
-                "&channel=" + encodeURIComponent("#proposals");
+                "&channel=" + encodeURIComponent(proposalsChannelName) +
+                  "&icon_emoji=" + encodeURIComponent(iconEmoji);
     callSlackWebAPI(apiMethod, "post");
     
     if (e["doc"] !== null) {
