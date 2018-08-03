@@ -194,7 +194,7 @@ function getTests() {
 
     function GivenOneProposal_AndItHasFutureDueDate_WhenGetResultsToPost_ThenDontPostAnything() {
       // given there is one proposal
-      var messages = [{text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
+      var messages = [{username: "proposal-bot", text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
       
       // and its due date is in the future relative to reference date
       var referenceDate = new Date("Mon, Jun 25, 2018, 8:59 PM");
@@ -209,7 +209,7 @@ function getTests() {
     function GivenOneProposal_AndItHasPastDueDate_AndNoResultsPostedYet_WhenGetResultsToPost_ThenPostOneResult() {
       // given there is one proposal
       // and no results are posted for it yet
-      var messages = [{ts: 123, replies: [{user: "someone other than the proposal bot", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
+      var messages = [{ts: 123, username: "proposal-bot", replies: [{user: "someone commenting on another proposal", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
       
       // and its due date is in the past relative to reference date
       var referenceDate = new Date("Mon, Jun 25, 2018, 9:01 PM");
@@ -224,7 +224,7 @@ function getTests() {
     function GivenOneProposal_AndItHasPastDueDate_AndResultsAlreadyPosted_WhenGetResultsToPost_ThenDontPostAnything() {
       // given there is one proposal
       // and results are already posted for it
-      var messages = [{ts: 123, replies: [{user: "B00", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
+      var messages = [{ts: 123, username: "proposal-bot", replies: [{user: "BBCDXF8MP", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}]
       
       // and its due date is in the past relative to reference date
       var referenceDate = new Date("Mon, Jun 25, 2018, 9:01 PM");
@@ -239,8 +239,8 @@ function getTests() {
     function GivenTwoProposals_AndBothArePastDueDate_AndNeitherHasResultsYet_WhenGetResultsToPost_ThenPostBothResults() {
       // given there are two proposals
       // and neither has results yet
-      var messages = [{ts: 123, reactions: [{name: "+1", count: 2}], replies: [{user: "not proposal bot", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"},
-                      {ts: 124,  reactions: [{name: "+1", count: 3}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}
+      var messages = [{ts: 123, username: "proposal-bot", reactions: [{name: "+1", count: 2}], replies: [{user: "not proposal bot", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"},
+                      {ts: 124,  username: "proposal-bot", reactions: [{name: "+1", count: 3}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}
                      ]
       
       // and both have due dates in the past relative to reference date
@@ -257,8 +257,8 @@ function getTests() {
     function GivenTwoProposals_AndBothArePastDueDate_AndOneDoesntHaveResultsYet_WhenGetResultsToPost_ThenPostToThatOne() {
       // given there are two proposals
       // and one doesn't have results yet
-      var messages = [{ts: 123, reactions: [{name: "+1", count: 2}], replies: [{user: "B00", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"},
-                      {ts: 124,  reactions: [{name: "stop", count: 3}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}
+      var messages = [{ts: 123, username: "proposal-bot", reactions: [{name: "+1", count: 2}], replies: [{user: "BBCDXF8MP", ts: 234}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"},
+                      {ts: 124, username: "proposal-bot", reactions: [{name: "stop", count: 3}], text: "Some text and then *Comment period closes:* Mon, Jun 25, 2018, 9:00 PM Pacific Time and then more text"}
                      ]
       
       // and both have due dates in the past relative to reference date
