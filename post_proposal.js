@@ -1,6 +1,8 @@
 function resubmitLastResponse() {
   
-  var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
+  var config = getConfig();
+  var formId = config["form_id"];
+  var form = FormApp.openById(formId);
   
   // get most recently submitted response
   var responses = form.getResponses();
@@ -9,29 +11,34 @@ function resubmitLastResponse() {
   Logger.log(formResponse.getEditResponseUrl());
   
   // run onSubmit with mock resubmission
-  // onSubmit(e);
+  var e = {"response": formResponse};
+  onSubmit(e);
 }
 
 function resubmitTestResponse() {
   
-  var form = FormApp.openById("1_UbOt0dCuM324WAgYHVTLKUUmbDBkbwX84pKbRXAL_0");
+  var config = getConfig();
+  var formId = config["form_id"];
+  var testResponseId = config["test_response_id"];
+  var form = FormApp.openById(formId);
   
   // get test response
-  var formResponse = form.getResponse("2_ABaOnuf8JiYQJ8oT204sEDOeTw-YNR-ylzsUoUfUK3QnzWU5EiiKeF69ZcCu");
+  var formResponse = form.getResponse(testResponseId);
   Logger.log(formResponse.getId());
   Logger.log(formResponse.getEditResponseUrl());
   
   // run onSubmit with mock resubmission
-  // onSubmit(e);
+  var e = {"response": formResponse};
+  onSubmit(e);
 }
 
 function onSubmit(e) {
   
-  var secrets = getSecrets(); // in separate file
-  var templateFileId = secrets["template_file_id"]; // link to [Template] doc
-  var slackUrl = secrets["slack_incoming_webhook_url"]; // url to post to Slack
-  var bitlyToken = secrets["bitly_token"];
-  var bitlyGroupGuid = secrets["bitly_group_guid"];
+  var config = getConfig(); // in separate file
+  var templateFileId = config["template_file_id"]; // link to [Template] doc
+  var bitlyToken = config["bitly_token"];
+  var bitlyGroupGuid = config["bitly_group_guid"];
+  var votingDays = config["voting_days"];
   
   var formResponse = e.response;
   
@@ -53,12 +60,13 @@ function onSubmit(e) {
   var bitlyUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, newUrl);
   var isReady = isReadyToSubmit(formResponse);
   if (isReady) {
-    var dueDate = new Date().addDays(2); // voting closes in 2 days
-    announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate);
+    var dueDate = new Date().addDays(votingDays);
+    announceOnSlack(proposalTitle, bitlyUrl, dueDate);
   } else {
     var slacks = getOrganizerSlacks(newDoc); // hack since we have this method in post_results when reading from a document
     var editUrl = formResponse.getEditResponseUrl();
-    announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, editUrl, slacks);
+    var bitlyEditUrl = getBitlyUrl(bitlyToken, bitlyGroupGuid, editUrl);
+    announceNotReadyOnSlack(proposalTitle, bitlyUrl, bitlyEditUrl, slacks);
   }
 }
 
@@ -145,8 +153,8 @@ function insertProposalText(doc, formResponse) {
     if (i > 0) {
       body.insertParagraph(paragraphIndex, ""); // add empty space unless it's the first response
     }
-    body.insertParagraph(paragraphIndex, answer).setBold(false); // add answer
-    body.insertParagraph(paragraphIndex, question).setBold(true); // add question
+    body.insertParagraph(paragraphIndex, answer).setBold(false); // add answer (not bold)
+    body.insertParagraph(paragraphIndex, question).setBold(true); // add question (bold)
   }
 }
 
@@ -197,54 +205,65 @@ function getBitlyUrl(bitlyToken, bitlyGroupGuid, url) {
   return(bitlyUrl);
 }
 
-function announceOnSlack(slackUrl, proposalTitle, bitlyUrl, dueDate) {
+function announceOnSlack(proposalTitle, bitlyUrl, dueDate) {
+  
+  var config = getConfig();
+  var announcementsChannelName = config["announcements_channel_name"];
+  var proposalsChannelName = config["proposals_channel_name"];
+  var inboxChannelName = config["inbox_channel_name"];
+  
   var dueDateStr = Utilities.formatDate(dueDate, "US/Pacific", "EEE, MMM d, YYYY, h:mm a 'Pacific Time'");
+
+  // post to announcements channel
   
-  var payload = {
-    "username" : "proposal-bot",
-    "icon_emoji": ":fist:",
-    "link_names": 1
-  };
-  
-  var announceText = "A new proposal has been posted!\n\n" +
+  var announcementsText = "A new proposal has been posted!\n\n" +
               "*Name:* _" + proposalTitle + "_\n\n" +
-              "*Comment period closes*: " + dueDateStr + "\n\n" +
-              "*How can you participate in the proposal process?*\n\n" +
-              "Head over to #proposals and follow the quick directions. I expect it’ll take less than 5 mins to read, comment (if you want), and vote on the proposal. Head to #proposal_inbox if you have any questions or problems.";
+               "*Comment period closes*: " + dueDateStr + "\n\n" +
+                "*How can you participate in the proposal process?*\n\n" +
+                 "Head over to #" + proposalsChannelName + " and follow the quick directions. I expect it’ll take less than 5 mins to read, comment (if you want), and vote on the proposal. " +
+                  "Head to #" + inboxChannelName + " if you have any questions or problems.";
   
-  var announcePayload = payload;
-  announcePayload['text'] = announceText;
-  announcePayload['channel'] = "#announcements",
-  callAPI(slackUrl, announcePayload, "post");
+  var announcementsApiMethod = "chat.postMessage" +
+    "?link_names=1" +
+      "&text=" + encodeURIComponent(announcementsText) +
+        "&channel=" + encodeURIComponent(announcementsChannelName);
+  
+  callSlackWebAPI(announcementsApiMethod, "post");
+  
+  // post to proposals channel
   
   var proposalsText = "A new proposal has been posted!\n\n" +
-      "Place your emoji vote (:+1: / :-1: / :stop:) on this post. Please do not comment in this channel. Comment in the *Comments* section at the bottom of the Google Doc linked below. Please head over to #proposal_inbox if you have any questions about this process.\n\n" +
-        "*Name:* _" + proposalTitle + "_\n\n" + 
+      "Place your emoji vote (:+1: / :-1: / :stop:) on this post. Please do not comment in this channel. Comment in the *Comments* section at the bottom of the Google Doc linked below. " +
+        "Please head over to #" + inboxChannelName + " if you have any questions about this process.\n\n" +
+         "*Name:* _" + proposalTitle + "_\n\n" + 
           "*Comment period closes:* " + dueDateStr + "\n\n" +
-            "*Link to proposal:* " + bitlyUrl;
+           "*Link to proposal:* " + bitlyUrl;
   
-  var proposalsPayload = payload;
-  proposalsPayload['text'] = proposalsText;
-  proposalsPayload['channel'] = "#proposals",
-  callAPI(slackUrl, proposalsPayload, "post");
+  var proposalsApiMethod = "chat.postMessage" +
+    "?link_names=1" +
+      "&text=" + encodeURIComponent(proposalsText) +
+        "&channel=" + encodeURIComponent(proposalsChannelName);
+  
+  callSlackWebAPI(proposalsApiMethod, "post");
 }
 
-function announceNotReadyOnSlack(slackUrl, proposalTitle, bitlyUrl, editUrl, slacks) {
+function announceNotReadyOnSlack(proposalTitle, bitlyUrl, bitlyEditUrl, slacks) {
   
-  var payload = {
-    "username" : "proposal-bot",
-    "icon_emoji": ":fist:",
-    "link_names": 1,
-    "channel" : "#proposal_inbox",
-    "text": "@channel Someone posted a proposal but would like some help before announcing it officially.\n\n" +
+  var config = getConfig();
+  var inboxChannelName = config["inbox_channel_name"];
+  var inboxText = "@channel Someone posted a proposal but would like some help before announcing it officially.\n\n" +
              "*Name:* _" + proposalTitle + "_\n\n" +
               "*Link to tentative proposal:* " + bitlyUrl + "\n\n" +
-               "*Link to edit and submit proposal:* " + editUrl
-  };
+               "*Link to edit and resubmit:* " + bitlyEditUrl;
   
   if (slacks.length > 0) {
-    payload["text"] += "\n\n*Organizers:* " + slacks.join(" ");
+    inboxText += "\n\n*Organizers:* " + slacks.join(" ");
   }
   
-  callAPI(slackUrl, payload, "post");
+  var inboxApiMethod = "chat.postMessage" +
+    "?link_names=1" +
+      "&text=" + encodeURIComponent(inboxText) +
+        "&channel=" + encodeURIComponent(inboxChannelName);
+  
+  callSlackWebAPI(inboxApiMethod, "post");
 }
